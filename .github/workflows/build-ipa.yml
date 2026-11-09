@@ -1,0 +1,46 @@
+name: Build SlutSearch 1.2.1 IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Unpack SlutSearch Xcode project
+        run: |
+          python3 - <<'PYCODE'
+          import zipfile
+          from pathlib import Path
+          with zipfile.ZipFile('SlutSearch-1.2.1-project.zip') as z:
+              for item in z.infolist():
+                  dest = (Path.cwd() / item.filename).resolve()
+                  if not dest.is_relative_to(Path.cwd().resolve()):
+                      raise RuntimeError('Unsafe path: ' + item.filename)
+              z.extractall('.')
+          print('Source project unpacked')
+          PYCODE
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Compile unsigned iOS IPA
+        run: bash scripts/build_unsigned_ipa.sh
+      - name: Publish IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlutSearch-1.2.1-unsigned-IPA
+          path: |
+            dist/SlutSearch-iOS-1.2.1-unsigned.ipa
+            dist/SlutSearch-iOS-1.2.1-unsigned.ipa.sha256
+          if-no-files-found: error
+      - name: Preserve build log if compilation failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlutSearch-build-error-log
+          path: .build/xcodebuild.log
+          if-no-files-found: ignore
